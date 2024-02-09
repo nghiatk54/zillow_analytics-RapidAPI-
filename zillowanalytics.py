@@ -1,6 +1,7 @@
 from airflow import DAG
 from datetime import timedelta, datetime
 from airflow.operators.python import PythonOperator
+from airflow.operators.bash_operator import BashOperator
 import json
 import requests
 
@@ -61,3 +62,10 @@ with DAG('zillow_analytics_dag',
                     'date_string': dt_now_string
         }
     )
+
+    load_to_s3 = BashOperator(
+        task_id='tsk_load_to_s3',
+        bash_command = 'aws s3 mv {{ ti.xcom_pull("tsk_extract_zillow_data_var")[0]}} s3://endtoend-zillow-bucket'
+    )
+
+    extract_zillow_data_var >> load_to_s3
