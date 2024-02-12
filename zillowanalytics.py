@@ -3,6 +3,7 @@ from datetime import timedelta, datetime
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash_operator import BashOperator
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
+from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOperator
 import json
 import requests
 
@@ -82,4 +83,15 @@ with DAG('zillow_analytics_dag',
         poke_interval=5
     )
 
-    extract_zillow_data_var >> load_to_s3 >> is_file_in_s3_available
+    transfer_s3_to_redshift = S3ToRedshiftOperator(
+        task_id='tsk_transfer_s3_to_redshift',
+        aws_conn_id='aws_s3_conn',
+        redshift_conn_id='conn_id_redshift',
+        s3_bucket=s3_bucket,
+        s3_key='{{ti.xcom_pull("tsk_extract_zillow_data_var")[1]}}',
+        schema='PUBLIC',
+        table='zillowdata',
+        copy_options=["csv IGNOREHEADER 1"]
+    )
+
+    extract_zillow_data_var >> load_to_s3 >> is_file_in_s3_available >> transfer_s3_to_redshift
