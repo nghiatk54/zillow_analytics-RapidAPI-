@@ -2,6 +2,7 @@ from airflow import DAG
 from datetime import timedelta, datetime
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash_operator import BashOperator
+from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 import json
 import requests
 
@@ -12,6 +13,9 @@ with open('/home/ubuntu/airflow/config_api.json', 'r') as config_file:
 # Date string
 now = datetime.now()
 dt_now_string = now.strftime("%d%m%Y%H%M%S")
+
+# Define the S3 bucket
+s3_bucket = "cleaned-data-zone-csv-bucket-zillow"
 
 # Function extract zillow data
 def extract_zillow_data(**kwargs):
@@ -68,4 +72,14 @@ with DAG('zillow_analytics_dag',
         bash_command = 'aws s3 mv {{ ti.xcom_pull("tsk_extract_zillow_data_var")[0]}} s3://endtoend-zillow-bucket'
     )
 
-    extract_zillow_data_var >> load_to_s3
+    is_file_in_s3_available = S3KeySensor(
+        task_id='tsk_is_file_in_s3_available',
+        bucket_key='{{ti.xcom_pull("tsk_extract_zillow_data_var")[1]}}',
+        bucket_name=s3_bucket,
+        aws_conn_id='aws_s3_conn',
+        wildcard_match=False,
+        timeout=120,
+        poke_interval=5
+    )
+
+    extract_zillow_data_var >> load_to_s3 >> is_file_in_s3_available
